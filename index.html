@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>自有资金 FOF 组合研究原型</title>
+    <link rel="stylesheet" href="./assets/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div>
+            <p class="eyebrow">Proprietary Capital</p>
+            <h1>FOF 组合研究驾驶舱</h1>
+          </div>
+          <span class="status-dot"></span>
+        </div>
+
+        <section class="control-block">
+          <div class="block-title">
+            <span>数据表</span>
+            <span id="dateRange" class="muted"></span>
+          </div>
+          <div class="segmented" id="sheetSwitch"></div>
+        </section>
+
+        <section class="control-block">
+          <div class="block-title">
+            <span>目标收益</span>
+            <strong id="targetLabel">8.0%</strong>
+          </div>
+          <input id="targetSlider" class="slider" type="range" min="5" max="15" step="0.5" value="8" />
+          <div class="target-presets">
+            <button data-target="6">6%</button>
+            <button data-target="8" class="active">8%</button>
+            <button data-target="10">10%</button>
+          </div>
+        </section>
+
+        <section class="control-block">
+          <div class="block-title">
+            <span>调仓与估计</span>
+          </div>
+          <label class="field-row">
+            <span>调仓频率</span>
+            <select id="rebalanceFreq">
+              <option value="M" selected>月度</option>
+              <option value="Q">季度</option>
+            </select>
+          </label>
+          <label class="field-row">
+            <span>回看窗口</span>
+            <select id="lookbackWindow">
+              <option value="126">半年</option>
+              <option value="252" selected>一年</option>
+              <option value="504">两年</option>
+            </select>
+          </label>
+          <label class="field-row">
+            <span>风险口径</span>
+            <select id="riskMode">
+              <option value="covariance" selected>协方差</option>
+              <option value="semivariance">半方差</option>
+            </select>
+          </label>
+          <label class="field-row">
+            <span>组合模型</span>
+            <select id="modelType">
+              <option value="history" selected>历史回看均值方差</option>
+              <option value="riskParity">风险平价</option>
+              <option value="blackLitterman">Black-Litterman</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="control-block">
+          <div class="block-title">
+            <span>组合约束</span>
+          </div>
+          <label class="field-row">
+            <span>单资产上限</span>
+            <input id="maxWeight" type="number" value="35" min="5" max="80" step="5" />
+          </label>
+          <label class="field-row">
+            <span>债券底仓下限</span>
+            <input id="bondFloor" type="number" value="10" min="0" max="70" step="5" />
+          </label>
+          <label class="field-row">
+            <span>权益方向上限</span>
+            <input id="equityCap" type="number" value="55" min="0" max="100" step="5" />
+          </label>
+        </section>
+
+        <section class="control-block">
+          <div class="block-title">
+            <span>可投策略池</span>
+            <button id="selectCore" class="text-button">核心池</button>
+          </div>
+          <div id="assetList" class="asset-list"></div>
+        </section>
+
+        <section class="control-block">
+          <div class="block-title">
+            <span>投资观点输入</span>
+          </div>
+          <p class="mini-help">收益和回撤均为年化预期，留空则使用历史估计。</p>
+          <div id="viewInputs" class="view-inputs compact"></div>
+        </section>
+
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Research Prototype</p>
+            <h2>动态调仓、相关性压力与区间收益测算</h2>
+          </div>
+          <div class="top-actions">
+            <button id="rebalanceBtn">重新优化</button>
+            <button id="exportBtn">导出结果</button>
+          </div>
+        </header>
+
+        <section class="kpi-grid">
+          <div class="kpi">
+            <span>样本年化收益</span>
+            <strong id="kpiReturn">--</strong>
+          </div>
+          <div class="kpi">
+            <span>年化波动</span>
+            <strong id="kpiVol">--</strong>
+          </div>
+          <div class="kpi">
+            <span>最大回撤</span>
+            <strong id="kpiMdd">--</strong>
+          </div>
+          <div class="kpi">
+            <span>夏普值</span>
+            <strong id="kpiSharpe">--</strong>
+          </div>
+          <div class="kpi">
+            <span>年度正收益概率</span>
+            <strong id="kpiPositive">--</strong>
+          </div>
+        </section>
+
+        <section class="logic-strip">
+          <div>
+            <strong>当前组合逻辑</strong>
+            <span id="logicText"></span>
+          </div>
+        </section>
+
+        <section class="main-grid">
+          <div class="panel full">
+            <div class="panel-head">
+              <div>
+                <h3>组合净值与回撤</h3>
+                <p>按设定频率调仓，持有到下一次调仓日</p>
+              </div>
+              <div class="nav-range-controls">
+                <label>年度 <select id="navYearSelect"></select></label>
+                <label>开始 <input id="navStart" type="month" /></label>
+                <label>结束 <input id="navEnd" type="month" /></label>
+              </div>
+              <div class="legend">
+                <span><i class="line-blue"></i>组合净值</span>
+                <span><i class="line-green"></i>回撤</span>
+                <span id="benchmarkLegend"><i class="line-gold"></i>对标指数</span>
+              </div>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="navChart" height="300"></canvas>
+              <div id="navTooltip" class="chart-tooltip"></div>
+            </div>
+            <div id="navRangeStats" class="range-stat-grid"></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>当前建议权重</h3>
+                <p>全样本估计下接近目标收益且控制波动</p>
+              </div>
+            </div>
+            <canvas id="weightChart" height="280"></canvas>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>年度收益柱状图</h3>
+                <p>检查“每年正收益”的稳定性；带 * 年份为截至 <span id="yearCutoff">数据截止日</span> 收益</p>
+              </div>
+            </div>
+            <canvas id="yearChart" height="280"></canvas>
+          </div>
+
+          <div class="panel full">
+            <div class="panel-head">
+              <div>
+                <h3>动态权重占比</h3>
+                <p>横轴为时间，纵轴为各资产在组合中的占比；悬浮查看日期、净值和权重</p>
+              </div>
+              <div id="weightLegend" class="legend-wrap"></div>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="weightTimelineChart" height="310"></canvas>
+              <div id="weightTooltip" class="chart-tooltip wide-tooltip"></div>
+            </div>
+          </div>
+
+          <div class="panel full">
+            <div class="panel-head">
+              <div>
+                <h3>风险贡献面积图</h3>
+                <p>横轴为调仓时间，纵轴为 100% 总风险贡献，用于观察不同时期由哪些资产主导组合波动</p>
+              </div>
+              <div id="riskLegend" class="legend-wrap"></div>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="riskContributionChart" height="310"></canvas>
+              <div id="riskTooltip" class="chart-tooltip wide-tooltip"></div>
+            </div>
+          </div>
+
+          <div class="panel full">
+            <div class="panel-head">
+              <div>
+                <h3>区间月度收益</h3>
+                <p>选择任意区间，观察组合逐月收益分布</p>
+              </div>
+              <div class="range-controls">
+                <label>开始 <input id="rangeStart" type="month" /></label>
+                <label>结束 <input id="rangeEnd" type="month" /></label>
+              </div>
+            </div>
+            <div id="monthGrid" class="month-grid"></div>
+          </div>
+
+          <div class="panel full">
+            <div class="panel-head">
+              <div>
+                <h3>资产风险收益画像</h3>
+                <p>用于解释为什么选择这些策略桶</p>
+              </div>
+            </div>
+            <table>
+              <thead id="assetTableHead"></thead>
+              <tbody id="assetTable"></tbody>
+            </table>
+          </div>
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>正常相关性</h3>
+                <p>全样本日收益 Pearson 相关系数</p>
+              </div>
+            </div>
+            <div id="corrHeatmap" class="heatmap"></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>极端相关性</h3>
+                <p>组合日收益最差 10% 样本内的相关系数</p>
+              </div>
+            </div>
+            <div id="stressCorrHeatmap" class="heatmap"></div>
+          </div>
+
+        </section>
+      </main>
+    </div>
+
+    <script src="./assets/data.js"></script>
+    <script src="./assets/app.js"></script>
+  </body>
+</html>
